@@ -1,0 +1,245 @@
+
+# Packages import
+import matplotlib
+import os
+import cv2
+import csv
+
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.collections as mplcoll
+
+from ModelEvaluationCNN import cnn_test_images
+# import matplotlib
+from keras.utils import np_utils
+from sklearn.utils import shuffle
+
+matplotlib.rcParams['font.size'] = 12
+matplotlib.rcParams['font.family'] = 'serif'
+matplotlib.rcParams['font.serif'] = 'Times New Roman'
+matplotlib.rcParams['figure.dpi'] = 200
+
+# Define the number of classes
+num_classes = 7
+
+# Number of samples
+num_of_samples = len(cnn_test_images)  # loaded test set, artificial generation: 500
+
+# For artificially generated samples
+# labels = np.ones((num_of_samples,), dtype='int64')
+#
+# labels[0:70] = 0  # 70
+# labels[70:140] = 1  # 70
+# labels[140:210] = 2  # 70
+# labels[210:290] = 3  # 80
+# labels[290:360] = 4  # 70
+# labels[360:430] = 5  # 70
+# labels[430:] = 6  # 70
+#
+# samples_matrix = np_utils.to_categorical(labels, num_classes)
+# samples_mat_shuffled = shuffle(samples_matrix, random_state=2)
+# samples_mat_shuffled_T = samples_mat_shuffled.transpose()
+
+
+# Softmax function
+def softmax(x, axis):
+    x -= np.max(x, axis=axis, keepdims=True)
+    return np.exp(x) / np.exp(x).sum(axis=axis, keepdims=True)
+
+
+# matrix_rand_vals
+# matrix_rand_vals = np.random.rand(num_of_samples, num_classes)*np.sqrt(2/(4*(num_classes+num_classes)))
+matrix_rand_vals_unif = np.random.uniform(0, 0.1, (num_of_samples, num_classes))
+
+# samples_mat_shuffled_sumed_val = np.add(samples_mat_shuffled, samples_mat_shuffled)*2
+# samples_matrix_noisy = np.add(samples_mat_shuffled_sumed_val, matrix_rand_vals_unif)
+# samples_matrix_noisy = np.add(samples_mat_shuffled, matrix_rand_vals)
+# samples_matrix_extra_noisy = np.add(samples_mat_shuffled, samples_matrix_noisy)
+# samples_matrix_extra2_noisy = np.add(samples_mat_shuffled, samples_matrix_extra_noisy)
+
+# matrix_rand_softmax = softmax(np.copy(samples_matrix_noisy), axis=1).round(4)
+# matrix_rand_softmax_T = np.copy(matrix_rand_softmax).transpose()
+# select_a_col = matrix_rand_softmax_T[:, 0]
+
+cnn_test_images_T = np.copy(cnn_test_images).transpose()
+
+Tmax = num_of_samples
+Tmax_sum_of_ones = 0
+Tmax_vector = np.zeros(Tmax)
+
+# Weights initialization
+X = np.identity(num_classes)
+
+#  He et al weights initialization with uniform distribution
+# W_ini = np.random.rand(num_classes, num_classes)*np.sqrt(2/(num_classes+num_classes))
+
+# He et al weights initialization with normal distribution
+W_ini = np.random.rand(num_classes, num_classes)*np.sqrt(2/(num_classes+num_classes))
+
+# W = np.copy(W_ini)
+
+W_ini_successful = np.array([[0.34439495, 0.12945882, 0.27732324, 0.19798741, 0.28076252, 0.2439525, 0.36602073],
+                             [0.11088031, 0.22888819, 0.3095505,  0.0374476,  0.14213472, 0.05574665, 0.3207117],
+                             [0.15552886, 0.31547329, 0.22836118, 0.0318413,  0.21936051, 0.20286181, 0.09836755],
+                             [0.23191695, 0.01350422, 0.12310664, 0.31986094, 0.10239422, 0.14324991, 0.11327538],
+                             [0.06996902, 0.20535539, 0.18040682, 0.36686384, 0.16877006, 0.31430276, 0.12015419],
+                             [0.06691047, 0.33693776, 0.08583165, 0.1008887,  0.10342436, 0.09694605, 0.10953938],
+                             [0.35994425, 0.08581264, 0.04572376, 0.09946404, 0.00585818, 0.09607266, 0.2381075]])
+
+W = np.copy(W_ini)
+
+# Learning rate
+delta_pos = 0.1
+delta_neg = 0.1
+
+# For identifying when all emotions are imitated correctly
+desired_out = np.arange(0, 7)
+desired_out_list = desired_out.tolist()
+
+correct_imitation = -1
+
+num_iterations = np.zeros(7)
+num_correct_iterations = np.zeros(7)
+winner_iteration = 1
+
+Tmax_sums_list = []
+t_list = []
+
+y_list = []
+
+filename_train_eps = "./imitation_files/association_unidist_30_eps_r1.csv"
+
+Epochs = 30
+for epoch in range(Epochs):
+
+    t = 0
+    for t in range(Tmax):
+
+        # random_value_x = np.random.randint(num_classes)
+        # selected_col_x = X[:, random_value_x]
+        selected_col_x = cnn_test_images_T[:, t]  # samples_mat_shuffled_T[:, t]  # matrix_rand_softmax_T for data in range((len(sample_matrix))or numsamples) do select x then break
+        max_x_index = np.argmax(selected_col_x)
+        # print(max_x_index)
+        y = W.dot(selected_col_x)
+        # print(y)
+        k = np.argmax(y)
+        # print(k)
+        w = W[k, :]
+        # print(w)
+        y_scalar = y[k]
+        # print(y_scalar)
+        # x_scalar = selected_col_x[random_value_x]
+        num_iterations[max_x_index] = num_iterations[max_x_index] + 1
+
+        if max_x_index == k:
+            num_correct_iterations[k] = num_correct_iterations[k] + 1
+            w = w + delta_pos*y_scalar*(selected_col_x-(y_scalar*w))  # Ojas rule
+            # print(w)
+            W[k, :] = w
+            Tmax_Value = 1
+            Tmax_vector[t] = Tmax_Value
+            Tmax_sum_of_ones += Tmax_Value
+            t_list.append(t)
+            # print("Norm: ", np.linalg.norm(w))
+
+        else:
+            w = w - delta_neg*selected_col_x*y_scalar
+            W[k, :] = w
+
+        current_out = np.argmax(W, axis=0)
+        current_out_list = current_out.tolist()
+
+        if current_out_list == desired_out_list and winner_iteration == 1:
+            correct_imitation = t
+            winner_iteration = 2
+
+    ep_acc = np.sum(Tmax_vector)/Tmax  # for each epoch tmax vector divided by num of samples
+
+    with open(filename_train_eps, "a") as csv_file:
+        csv_file.write("\n")
+        csv_file.write(str(epoch) + ', ' + str(ep_acc))
+
+
+print("W matrix: \n", W)
+filename_weights = "./imitation_files/Weights_test6.csv"
+np.savetxt(filename_weights, W, delimiter=",")
+
+print("W matrix argmax: \n", np.argmax(W, axis=0))
+filename_argmax = "./imitation_files/Weights_argmax_test6.csv"
+argmax_weights = np.argmax(W, axis=0)
+np.savetxt(filename_argmax, argmax_weights, delimiter=",")
+
+print("Tmax sum: ", Tmax_sum_of_ones)
+print("t:", t)
+print("All 7 emotions imitated correctly once at: ", correct_imitation)
+print("Number of overall iterations: ", num_iterations)
+print("Number of iterations for correct emotion imitation: ", num_correct_iterations)
+
+# add new var because of epochs into inner for in training
+batches = 8  # 25
+iterations = 12  # 20
+iterations_vector = np.copy(Tmax_vector)
+iterations_matrix = iterations_vector.reshape(batches, iterations)
+
+accuracies_list = []
+
+for i in range(batches):
+
+    iteration_sum = np.sum(iterations_matrix[i, :])
+    iteration_accuracy = iteration_sum / iterations
+    accuracies_list.append(iteration_accuracy)
+
+print("accuracies per batch:", accuracies_list)
+
+# run from here
+xdata = np.arange(batches)  # time iterations
+ydata = np.asarray(accuracies_list)  # accuracy
+
+print('xdata:', xdata)
+print('ydata:', ydata)
+
+Figure_Iterations = plt.figure('Imitation accuracy', figsize=(12, 6))
+ax = Figure_Iterations.add_subplot(1, 1, 1)
+ax.plot(xdata, ydata, color='tab:blue', marker='o')
+
+xevents = mplcoll.EventCollection(xdata, color='tab:blue', linelength=0.05)
+yevents = mplcoll.EventCollection(ydata, color='tab:blue', linelength=1, orientation='vertical')
+
+ax.add_collection(xevents)
+ax.add_collection(yevents)
+
+ax.set_xlim([0, batches])  # time, batches
+ax.set_ylim([0, 1])  # accuracy
+
+ax.grid(color='k', linestyle='--', linewidth=0.5)
+ax.set_xlabel('Time (batches)')
+ax.set_ylabel('accuracy')
+ax.set_title("Imitation learning using Oja's rule")
+plt.show()
+
+
+# # Plot t where j = k
+# plt.plot(Tmax_vector)
+# plt.xlabel('Tmax_vector, Total count: ' + str(Tmax_sum_of_ones))
+# plt.show()
+#
+# plt.figure(1)
+# plt.subplot(211)
+# plt.plot(Tmax_sums_list)
+# plt.xlabel('Correct associations each 25 epochs: ' + str(Tmax_sums_list))
+#
+# plt.subplot(212)
+# plt.plot(t_list)
+# plt.xlabel('Total count of correct associations: ' + str(Tmax_sum_of_ones))
+#
+# plt.figure(2)
+# plt.subplot(111)
+# plt.plot(Tmax_sums_list, 'bs')
+# plt.xlabel('Correct associations each 25 epochs: ' + str(Tmax_sums_list))
+#
+# # plt.close('all')
+
+# print(Tmax_sums_list)
+# # Confusion matrix
+# # End CM
+
